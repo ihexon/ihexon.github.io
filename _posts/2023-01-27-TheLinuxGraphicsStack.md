@@ -1,10 +1,11 @@
 ---
-title: 关于 Linux 显示软件与技术栈，我想到说说什么
+title: 关于 Linux 显示软件与技术栈，乱谈一下
 articles:
    excerpt_type: html
 ---
 
 Linux 显示软件栈贼复杂，是我见过最复杂的系统，然后我本来就挺笨的。关于Linux 显示软件与技术栈说错我不负责，你看看就好
+<!--more-->
 
 # 说一下 2D 渲染
 
