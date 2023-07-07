@@ -65,6 +65,3 @@ isa                     : mips1 mips2 mips32r1 mips32r2
 ASEs implemented        : mips16 dsp mt
 ```
 
-# 最后帮个忙
-
-另外我考研没考上还掉了应届生资格，现在求一份工作，大概就是 主机安全&Linux攻防，帮下忙。
