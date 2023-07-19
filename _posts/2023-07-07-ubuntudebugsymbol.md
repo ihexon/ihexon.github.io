@@ -66,9 +66,9 @@ Reading symbols from /usr/lib/debug/.build-id/ef/1ccd6daeaf8bb406137eb3b9890a863
 (gdb)
 ```
 
-# `[debuginfod](https://debuginfod.ubuntu.com)` 在线提供 debug symbol
+# ubuntu 在线提供 debug symbol
 
-使用 debuginfod 那就更方便了，只需要
+使用Ubuntu 提供的 debuginfod 服务那就更方便了，只需要
 
 1. 在设置环境变量 `DEBUGINFOD_URLS` 为"[https://debuginfod.ubuntu.com](https://debuginfod.ubuntu.com/)"。
 2. gdb 设置 `set debuginfod enabled on`
