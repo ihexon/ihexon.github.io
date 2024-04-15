@@ -1,6 +1,11 @@
-# WIFI BT 调试笔记
+---
+title: WIFI BT 调试笔记
+tags: wifi bluetooth rockchip
+---
 
 # dtsi :
+<!--more-->
+
 ```
 sdio_pwrseq: sdio-pwrseq {
 compatible = "mmc-pwrseq-simple";

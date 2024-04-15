@@ -1,6 +1,6 @@
 ---
 title: UFI001C 平台折腾记录
-tags: openwrt, msm8916, ufi003
+tags: openwrt msm8916 ufi003
 ---
 
 # Openwrt4UFI Stick Notes 
