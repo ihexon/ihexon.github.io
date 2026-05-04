@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-url="$1"
-
-curl --insecure "$1/download" | sed 's#https://md.zzh.com/uploads/#/images/#g' > /tmp/post.md
-curl --insecure "$1/download" | grep 'md.zzh.com/uploads' | grep -oE 'https://.*' | sed 's/)//g' > /tmp/dlist
-
-cd images/
-wget --no-check-certificate $(cat /tmp/dlist)
