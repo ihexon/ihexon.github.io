@@ -10,17 +10,17 @@ title = "IHEXON BLOG"
   rtl = false
   dateFormat = "2 January 2006"
   logo = "img/logo.png"
-  # secondaryLogo = "img/secondary-logo.png"
-  description = "A BLACK CAT"
-  # copyright = "Copy, _right?_ :thinking_face:"
+#  secondaryLogo = "img/logo2.jpg"
+  description = "IHEXON WEBSITE"
+  copyright = "Copy, _right?_ :thinking_face:"
 
 [params.author]
   name = "IHEXON"
   email = "zzheasy@gmail.com"
   image = "https://avatars.githubusercontent.com/u/14349453"
 #   imageQuality = 96
-#  headline = "Do You Hear the People Sing ?"
-#   bio = "Do You Hear the People Sing ?"
+  headline = "Do You Hear the People Sing ?"
+  bio = "Do You Hear the People Sing ?"
   links = [
 #     { email = "mailto:hello@your_domain.com" },
 #     { link = "https://link-to-some-website.com/" },
