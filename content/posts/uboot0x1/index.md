@@ -1,0 +1,167 @@
+---
+title: "U-Boot 研究记录"
+summary: "记录 U-Boot shell、VirtIO 设备、EXT4 分区读写、内存查看和常见启动错误。"
+description: "记录 U-Boot shell、VirtIO 设备、EXT4 分区读写、内存查看和常见启动错误。"
+date: 2023-05-03
+draft: false
+categories:
+  - "firmware"
+tags:
+  - "u-boot"
+  - "qemu"
+  - "virtio"
+---
+U-Boot 提供一个交互式的 Shell 可以操作内存与外设。
+
+<!--more-->
+
+## U-Boot shell
+
+### VirtIO 设备
+
+U-Boot 提供一个交互式的 Shell 可以操作内存与外设。
+
+使用 Qemu 的 virt 平台启动启动 U-Boot，添加 virtio-blk-pci 设备，drive 后端使用一个 raw 格式的虚拟磁盘。
+```bash
+$ qemu-system-aarch64 -enable-kvm \
+    -cpu max -smp 4  -m 512M  -machine virt  \
+    --device loader,file=./u-boot/u-boot \
+    -nographic  \
+    -drive if=none,file=disk/test,format=raw,id=hd0 \
+    -device virtio-blk-pci,drive=hd0
+```
+这个磁盘挂载 PCI 总线下所以可被自动探测到：
+```bash
+=> pci
+BusDevFun  VendorId   DeviceId   Device Class       Sub-Class
+_____________________________________________________________
+00.00.00   0x1b36     0x0008     Bridge device           0x00
+00.01.00   0x1af4     0x1000     Network controller      0x00
+00.02.00   0x1af4     0x1001     Mass storage controller 0x00
+```
+
+使用 virtio 命令对虚拟磁盘进行操作：
+```bash
+virtio scan - initialize virtio bus
+virtio info - show all available virtio block devices
+virtio device [dev] - show or set current virtio block device
+virtio part [dev] - print partition table of one or all virtio block devices
+virtio read addr blk# cnt - read `cnt' blocks starting at block
+     `blk#' to memory address `addr'
+virtio write addr blk# cnt - write `cnt' blocks starting at block
+     `blk#' from memory address `addr'
+```
+
+首先对所有的 virtio 设备进行扫描，并查看分区信息
+```bash
+=> virtio scan
+=> virtio info
+Device 0: 1af4 VirtIO Block Device
+            Type: Hard Disk
+            Capacity: 512.0 MB = 0.5 GB (1048576 x 512)
+```
+
+
+In order to boot ARM Linux, you require a boot loader, which is a small program that runs before the main kernel. The boot loader is expected to initialise various devices, and eventually call the Linux kernel, passing information to the kernel.
+
+Essentially, the boot loader should provide (as a minimum) the following:
+
+
+- Setup and initialise the RAM.
+- Initialise one serial port.
+- Detect the machine type.
+- Setup the kernel tagged list.
+- Load initramfs.
+- Call the kernel image.
+
+
+### U-Boot 读写 EXT4 分区
+
+理论上 U-Boot 已经支持 ext4 分区读写了，当在实践中却会报错：
+
+```bash
+=> ext4write virtio 0:1 0x40400000 /llvm 10
+Unsupported feature metadata_csum found, not writing.
+** Error ext4fs_write() **
+** Unable to write file /llvm **
+```
+
+
+原因是 `fs/ext4/ext4_write.c` 这个源文件内 ext4fs_write 函数内的这个判断语句阻止了在 U-Boot 在开启了 metadata_csum 的 ext4 文件系统上写入任何数据
+```c
+	int ext4fs_write(const char *fname, const char *buffer,
+		 unsigned long sizebytes, int type){
+        ....
+    if (le32_to_cpu(fs->sb->feature_ro_compat) & EXT4_FEATURE_RO_COMPAT_METADATA_CSUM) {
+		printf("Unsupported feature metadata_csum found, not writing.\n");
+		return -1;
+	}
+        ....
+            
+            
+}
+```
+
+解决方法也非常简单，关闭ext4 文件系统 metadata_csum 这个特性就可以了。
+```bash
+$ sudo tune2fs -O ^metadata_csum /dev/mapper/loop1p1
+```
+
+关闭后发现正常写入：
+```
+=> ext4write virtio 0:1 0x40400000 /fuck 10
+File System is consistent
+update journal finished
+16 bytes written in 316 ms (0 Bytes/s)
+```
+
+
+## 猫猫好奇内存里有什么
+
+导出 DTB
+
+```bash
+
+memsave 0x40000000 100000 dtb
+```
+
+### 常见错误
+
+**3G以上内存启动报错**
+
+U-Boot 内存大小在 qemu 中最大为 3GB，如果在 Qemu 中设置内存为 4GB，U-Boot 将会报错：
+```bash
+No working controllers found
+Net:   eth0: virtio-net#32
+WARNING: SMBIOS table_address overflow 13d63f020
+Failed to write SMBIOS table
+initcall failed at event 11/(unknown) (err=-22)
+### ERROR ### Please RESET the board ###
+```
+
+实际上 Qemu 的文档中有相关说明，意思就是 U-Boot 在 qemu 中最大内存只能支持到 3G。
+
+> Currently U-Boot for QEMU only supports 3 GiB maximum system memory and reserves the last 1 GiB address space for PCI device memory-mapped I/O and other stuff, so the maximum value of ‘-m’ would be 3072.
+
+
+## U-Boot vs U-Boot.bin vs U-Boot-nodtb.bin
+U-Boot.bin 和 U-Boot-nodtb.bin 其实是一个文件。
+![](images/b3f6a8f0-2ad2-451c-8080-74b65368b938.png)
+
+但为是什么 hash 一样 ？
+
+Makefile 中相关的判断条件如下：
+![](images/85169aa9-7759-46a3-a812-c73e00f11ee9.png)
+
+U-Boot.bin 和 U-Boot-nodtb.bin 由一些列在 Makefile 中的分支语句共同决定，具体看上面代码了不废话。在 qemu_arm64_defconfig 中走到的代码块是这一块：
+![](images/08869081-5560-4a2a-acb8-0f9db3b028f6.png)
+
+U-Boot.bin 需要 U-Boot-nodtb.bin，所以 跳转到这里去构建 U-Boot-nodtb.bin:
+![](images/5e9c284c-61fb-4192-bf7b-9bec57636490.png)
+
+然后
+![](images/efbadd4a-1afe-4c21-99c9-27d07782b080.png)
+
+显然是直接 copy 了
+
+if_changed 是一个Makefile 调用到的宏，一般用在 Kernel Build 系统中，U-boot 源码树也使用了这一机制。

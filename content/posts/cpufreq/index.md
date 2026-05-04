@@ -1,0 +1,124 @@
+---
+title: "Linux CPUFreq 调试笔记"
+summary: "整理 Linux CPU 调频策略、时钟、电压和调度相关配置，记录不同 governor 的行为差异。"
+description: "整理 Linux CPU 调频策略、时钟、电压和调度相关配置，记录不同 governor 的行为差异。"
+date: 2023-07-17
+draft: false
+categories:
+  - "linux-kernel"
+tags:
+  - "linux-kernel"
+  - "cpufreq"
+  - "scheduler"
+---
+整理 Linux CPU 调频策略和调度相关配置，记录不同 governor 的行为差异。
+
+<!--more-->
+
+### 策略：
+- sched：EAS 使用的调频策略。
+- interactive：根据 CPU 负载动态调频调压；
+- conservative：保守策略，逐级调整频率和电压；
+- ondemand：根据 CPU 负载动态调频调压，比 interactive 策略反应慢；
+- userspace：用户自己设置电压和频率，系统不会自动调整；
+- powersave：功耗优先，始终将频率设置在最低值；
+- performance：性能优先，始终将频率设置为最高值。
+### 时钟配置
+每个 CPU 节点下都有个 Clocks 属性，具体的名字由 CRU
+模块决定，不同的平台有不同的名字。如：dt-bindings/clock/rk3399-cru.h
+
+- 大核 A72 为 ARMCLKB
+- 小核 A53 为 ARMCLKL
+
+```dts
+cpu_l0: cpu@0 {
+device_type = "cpu";
+compatible = "arm,cortex-a53", "arm,armv8";
+reg = <0x0 0x0>;
+enable-method = "psci";
+#cooling-cells = <2>; /* min followed by max */
+dynamic-power-coefficient = <100>;
+clocks = <&cru ARMCLKL>;
+cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP>;
+};
+cpu_b0: cpu@100 {
+device_type = "cpu";
+compatible = "arm,cortex-a72", "arm,armv8";
+reg = <0x0 0x100>;
+enable-method = "psci";
+#cooling-cells = <2>; /* min followed by max */
+dynamic-power-coefficient = <436>;
+clocks = <&cru ARMCLKB>;
+cpu-idle-states = <&CPU_SLEEP &CLUSTER_SLEEP>;
+};
+```
+
+### 电压控制
+电压方案是不同的没有统一标准，一般又BSP上游提供，下游一般无需更改，CPU 的电压域配置一般在SoC对应的 DTSI 中，需要对每个 Node 节点进行配置，即每个 CPU 节点增加 CPU-supply 属性：
+```dts
+dd_cpu_b: syr827@40 {
+compatible = "silergy,syr827";
+reg = <0x40>;
+vin-supply = <&vcc5v0_sys>;
+regulator-compatible = "fan53555-reg";
+pinctrl-0 = <&vsel1_gpio>;
+vsel-gpios = <&gpio1 17 GPIO_ACTIVE_HIGH>;
+regulator-name = "vdd_cpu_b";
+egulator-min-microvolt = <712500>;
+regulator-max-microvolt = <1500000>;
+regulator-ramp-delay = <1000>;
+fcs,suspend-voltage-selector = <1>;
+regulator-always-on;
+regulator-boot-on;
+regulator-initial-state = <3>;
+regulator-state-mem {
+regulator-off-in-suspend;
+};
+};
+vdd_cpu_l: DCDC_REG2 {
+regulator-always-on;
+regulator-boot-on;
+regulator-min-microvolt = <750000>;
+regulator-max-microvolt = <1350000>;
+regulator-ramp-delay = <6001>;
+regulator-name = "vdd_cpu_l";
+regulator-state-mem {
+regulator-off-in-suspend;
+};
+};
+```
+每个CPU配置：
+```dts
+&cpu_l0 {
+cpu-supply = <&vdd_cpu_l>;
+};
+&cpu_l1 {
+cpu-supply = <&vdd_cpu_l>;
+};
+&cpu_l2 {
+cpu-supply = <&vdd_cpu_l>;
+};
+&cpu_l3 {
+cpu-supply = <&vdd_cpu_l>;
+};
+&cpu_b0 {
+cpu-supply = <&vdd_cpu_b>;
+};
+&cpu_b1 {
+cpu-supply = <&vdd_cpu_b>;
+};
+```
+频率电压表在 DTSI 中会有默认配置，在每个 CPU 节点下有 operating-Points-V2 属性，并且有个 opp Table 的节点和它配合使用。可以在板级 DTSI 或者 DTS 中增加新的 OPP TABLE覆盖 DTSI 中的配置。
+
+## 内核配置
+需要生成正确的.config 自行 Google。
+
+sysfs 提供接口：
+```
+/sys/devices/system/cpu/cpufreq/policy0/scaling_governor
+```
+多个 cluster 有多个 scaling_governor 节点如，需要一起调整。
+CPU 定频需要把 scaling_governor 切换成 userspace，然后写入期望的频率
+```
+echo 216000 > /sys/devices/system/cpu/cpu0/cpufreq/scaling_setspeed
+```
